@@ -1,0 +1,15 @@
+
+Error Message: Request failed with status code 500
+Error Response: {
+  "error": "next is not a function"
+}
+Full Stack: AxiosError: Request failed with status code 500
+    at settle (C:\Users\AARYAN UPADHYAY\Downloads\embeddedcraft\nudge-backend\node_modules\axios\dist\node\axios.cjs:2106:12)
+    at IncomingMessage.handleStreamEnd (C:\Users\AARYAN UPADHYAY\Downloads\embeddedcraft\nudge-backend\node_modules\axios\dist\node\axios.cjs:3491:11)
+    at IncomingMessage.emit (node:events:530:35)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    at Axios.request (C:\Users\AARYAN UPADHYAY\Downloads\embeddedcraft\nudge-backend\node_modules\axios\dist\node\axios.cjs:4731:41)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async testCreateClient (C:\Users\AARYAN UPADHYAY\Downloads\embeddedcraft\nudge-backend\scripts\testCreateClient.js:25:27)
+        
