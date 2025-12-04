@@ -16,6 +16,7 @@ const UserSchema = new mongoose.Schema({
     // System Metadata
     last_seen: { type: Date, default: Date.now },
     sessions_count: { type: Number, default: 0 },
+    segments: { type: [String], default: [] }, // User segments for targeting
 
     // Device Info (updated on identify)
     device: {

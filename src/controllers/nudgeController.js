@@ -48,46 +48,135 @@ class NudgeController {
 
             // 3. Filter Logic (In-Memory)
             // Filter by platform/target_audience AND complex targeting rules
-            const matchedNudge = (nudges || []).find(nudge => {
+            // 3. Filter Logic (Async)
+            let matchedNudge = null;
+            for (const nudge of (nudges || [])) {
                 // A. Platform Check
                 if (nudge.target_audience && nudge.target_audience.length > 0) {
-                    if (platform && !nudge.target_audience.includes(platform.toLowerCase())) return false;
+                    if (platform && !nudge.target_audience.includes(platform.toLowerCase())) continue;
+                }
+
+                // A.1 SDK Version Check
+                if (nudge.sdk_version_rule && nudge.sdk_version_rule.version) {
+                    const sdkVersion = req.query.sdkVersion || req.headers['x-nudge-sdk-version'];
+                    if (sdkVersion) {
+                        const ruleVersion = nudge.sdk_version_rule.version;
+                        // Simple string comparison for now (semver would be better but requires lib)
+                        if (nudge.sdk_version_rule.operator === 'equals' && sdkVersion !== ruleVersion) continue;
+                        if (nudge.sdk_version_rule.operator === 'greater_than' && sdkVersion <= ruleVersion) continue;
+                        if (nudge.sdk_version_rule.operator === 'less_than' && sdkVersion >= ruleVersion) continue;
+                    }
+                }
+
+                // A.2 Segment Check
+                if (nudge.segments && nudge.segments.length > 0) {
+                    // Assuming userProfile has a 'segments' array or we calculate it.
+                    // If userProfile.segments is missing, we assume they are NOT in the segment.
+                    const userSegments = userProfile.segments || [];
+                    const hasMatch = nudge.segments.some(seg => userSegments.includes(seg));
+                    if (!hasMatch) continue;
+                }
+
+                // A.3 Frequency Capping (Lifetime)
+                if (nudge.display_rules && nudge.display_rules.frequency_cap) {
+                    const impressions = await EventLog.countDocuments({
+                        organization_id: orgId,
+                        user_id: userId,
+                        nudge_id: nudge.nudge_id, // Ensure we track using nudge_id
+                        event_type: 'impression'
+                    });
+                    if (impressions >= nudge.display_rules.frequency_cap) continue;
+                }
+
+                // A.4 Session Capping
+                if (nudge.display_rules && nudge.display_rules.session_cap) {
+                    // Find the last session_start event
+                    const lastSessionStart = await EventLog.findOne({
+                        organization_id: orgId,
+                        user_id: userId,
+                        event_type: 'session_start'
+                    }).sort({ timestamp: -1 });
+
+                    const sessionStartTime = lastSessionStart ? lastSessionStart.timestamp : new Date(Date.now() - 30 * 60 * 1000); // Default to 30 mins ago if no session_start
+
+                    const sessionImpressions = await EventLog.countDocuments({
+                        organization_id: orgId,
+                        user_id: userId,
+                        nudge_id: nudge.nudge_id,
+                        event_type: 'impression',
+                        timestamp: { $gte: sessionStartTime }
+                    });
+
+                    if (sessionImpressions >= nudge.display_rules.session_cap) continue;
                 }
 
                 // B. Complex Targeting Rules
                 if (nudge.targeting && nudge.targeting.length > 0) {
-                    const allRulesPassed = nudge.targeting.every(rule => {
-                        // Handle Group Logic (AND/OR) - simplified for now, assuming top-level is AND
-                        if (rule.type === 'group') {
-                            // TODO: Recursive group evaluation
-                            return true;
-                        }
+                    let allRulesPassed = true;
+
+                    for (const rule of nudge.targeting) {
+                        // Handle Group Logic (AND/OR) - simplified for now
+                        if (rule.type === 'group') continue;
 
                         // Handle User Property Rules
                         if (rule.type === 'user_property') {
-                            const userValue = userProperties[rule.property];
+                            const userValue = userProperties[rule.property || rule.field];
                             const targetValue = rule.value;
+                            let rulePassed = false;
 
                             switch (rule.operator) {
-                                case 'equals': return userValue == targetValue;
-                                case 'not_equals': return userValue != targetValue;
-                                case 'greater_than': return Number(userValue) > Number(targetValue);
-                                case 'less_than': return Number(userValue) < Number(targetValue);
-                                case 'contains': return String(userValue).includes(String(targetValue));
-                                case 'not_contains': return !String(userValue).includes(String(targetValue));
-                                case 'set': return userValue !== undefined && userValue !== null;
-                                case 'not_set': return userValue === undefined || userValue === null;
-                                default: return true;
+                                case 'equals': rulePassed = userValue == targetValue; break;
+                                case 'not_equals': rulePassed = userValue != targetValue; break;
+                                case 'greater_than': rulePassed = Number(userValue) > Number(targetValue); break;
+                                case 'greater_than_or_equal': rulePassed = Number(userValue) >= Number(targetValue); break;
+                                case 'less_than': rulePassed = Number(userValue) < Number(targetValue); break;
+                                case 'less_than_or_equal': rulePassed = Number(userValue) <= Number(targetValue); break;
+                                case 'contains': rulePassed = userValue != null && String(userValue).includes(String(targetValue)); break;
+                                case 'not_contains': rulePassed = userValue == null || !String(userValue).includes(String(targetValue)); break;
+                                case 'set': rulePassed = userValue !== undefined && userValue !== null; break;
+                                case 'not_set': rulePassed = userValue === undefined || userValue === null; break;
+                                default: rulePassed = true;
+                            }
+                            if (!rulePassed) {
+                                allRulesPassed = false;
+                                break;
                             }
                         }
-                        return true;
-                    });
 
-                    if (!allRulesPassed) return false;
+                        // Handle Event Rules (e.g., "User performed 'Add to Cart' > 3 times")
+                        if (rule.type === 'event') {
+                            const eventName = rule.property || rule.field;
+                            const count = await EventLog.countDocuments({
+                                organization_id: orgId,
+                                user_id: userId,
+                                event_type: eventName
+                            });
+                            const targetValue = Number(rule.value);
+                            let rulePassed = false;
+
+                            switch (rule.operator) {
+                                case 'equals': rulePassed = count == targetValue; break;
+                                case 'not_equals': rulePassed = count != targetValue; break;
+                                case 'greater_than': rulePassed = count > targetValue; break;
+                                case 'greater_than_or_equal': rulePassed = count >= targetValue; break;
+                                case 'less_than': rulePassed = count < targetValue; break;
+                                case 'less_than_or_equal': rulePassed = count <= targetValue; break;
+                                default: rulePassed = true;
+                            }
+
+                            if (!rulePassed) {
+                                allRulesPassed = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!allRulesPassed) continue;
                 }
 
-                return true;
-            });
+                matchedNudge = nudge;
+                break; // Found the highest priority match
+            }
 
             // 4. Return Response
             return res.json({ data: matchedNudge || null });

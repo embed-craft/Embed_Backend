@@ -17,6 +17,20 @@ const NudgeSchema = new mongoose.Schema({
     segments: { type: [String], default: [] }, // User segments
     tags: { type: [String], default: [] }, // Campaign tags for organization
 
+    // Display Rules (Frequency & Capping)
+    display_rules: {
+        frequency_cap: { type: Number, default: null }, // Max times per user (lifetime)
+        session_cap: { type: Number, default: null }, // Max times per session
+        cooldown: { type: Number, default: 0 }, // Minutes between impressions
+        ignore_global_rules: { type: Boolean, default: false }
+    },
+
+    // SDK Version Targeting
+    sdk_version_rule: {
+        operator: { type: String, enum: ['equals', 'greater_than', 'less_than'], default: null },
+        version: { type: String, default: null }
+    },
+
     // Scheduling
     schedule: {
         start_date: Date,
