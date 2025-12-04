@@ -93,6 +93,38 @@ class AuthController {
             res.status(500).json({ error: error.message });
         }
     }
+
+    /**
+     * Change Password
+     * POST /api/auth/change-password
+     */
+    async changePassword(req, res) {
+        try {
+            const { currentPassword, newPassword } = req.body;
+
+            // Get user with password field included
+            const user = await User.findById(req.user.id).select('+password');
+
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            // Verify current password
+            const isMatch = await user.matchPassword(currentPassword);
+            if (!isMatch) {
+                return res.status(400).json({ error: 'Incorrect current password' });
+            }
+
+            // Update password (pre-save hook will hash it)
+            user.password = newPassword;
+            await user.save();
+
+            res.json({ message: 'Password updated successfully' });
+        } catch (error) {
+            console.error('Change Password Error:', error);
+            res.status(500).json({ error: 'Failed to update password' });
+        }
+    }
 }
 
 module.exports = new AuthController();

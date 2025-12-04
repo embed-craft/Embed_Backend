@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config(); // Trigger restart
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -27,6 +27,7 @@ app.use('/v1/admin/campaigns', campaignRoutes); // Dashboard Campaign API
 app.use('/v1/admin/metadata', metadataRoutes); // Dashboard Metadata API (Events & Properties)
 app.use('/v1/admin/analytics', require('./src/routes/analyticsRoutes')); // Dashboard Analytics API
 app.use('/v1/admin/assets', require('./src/routes/assetRoutes')); // Dashboard Assets API
+app.use('/v1/admin/team', require('./src/routes/teamRoutes')); // Dashboard Team API
 app.use('/', require('./src/routes/segmentRoutes')); // Segments API
 app.use('/', require('./src/routes/flowRoutes')); // Flows API
 app.use('/', require('./src/routes/templateRoutes')); // Templates API

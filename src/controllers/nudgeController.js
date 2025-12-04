@@ -302,13 +302,16 @@ class NudgeController {
                 }
 
                 if (Object.keys(update).length > 0) {
-                    await Nudge.updateOne(
-                        {
-                            $or: [{ _id: nudgeId }, { nudge_id: nudgeId }],
-                            organization_id: orgId
-                        },
-                        { $inc: update }
-                    );
+                    const mongoose = require('mongoose');
+                    const query = { organization_id: orgId };
+
+                    if (mongoose.Types.ObjectId.isValid(nudgeId)) {
+                        query.$or = [{ _id: nudgeId }, { nudge_id: nudgeId }];
+                    } else {
+                        query.nudge_id = nudgeId;
+                    }
+
+                    await Nudge.updateOne(query, { $inc: update });
                 }
             }
 
