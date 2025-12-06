@@ -20,6 +20,11 @@ app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 app.use('/uploads', express.static('uploads')); // Serve uploaded files
 
+// Health Check (Must be before routes to avoid auth middleware blocking)
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date() });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -32,11 +37,6 @@ app.use('/', require('./src/routes/segmentRoutes')); // Segments API
 app.use('/', require('./src/routes/flowRoutes')); // Flows API
 app.use('/', require('./src/routes/templateRoutes')); // Templates API
 app.use('/', nudgeRoutes);
-
-// Health Check
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date() });
-});
 
 // Database Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/nudge_db';
