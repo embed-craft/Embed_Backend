@@ -14,4 +14,7 @@ router.get('/dashboard', analyticsController.getDashboardStats);
 router.get('/users', analyticsController.getUsers);
 router.get('/users/:userId', analyticsController.getUserDetails);
 
+// Campaign Analytics
+router.get('/campaign/:campaignId', analyticsController.getCampaignStats);
+
 module.exports = router;

@@ -166,6 +166,86 @@ class AnalyticsController {
             res.status(500).json({ error: 'Failed to fetch user details' });
         }
     }
+    /**
+     * Get Campaign Stats
+     * GET /api/v1/admin/analytics/campaign/:campaignId
+     */
+    async getCampaignStats(req, res) {
+        try {
+            const { campaignId } = req.params;
+            const orgId = req.orgId; // Assuming auth middleware sets this
+            const EventLog = require('../models/EventLog');
+            const Nudge = require('../models/Nudge'); // Assuming Campaign model is Nudge
+
+            // 1. Fetch Campaign Details
+            const campaign = await Nudge.findOne({ _id: campaignId, organization_id: orgId }).lean();
+            if (!campaign) {
+                return res.status(404).json({ error: 'Campaign not found' });
+            }
+
+            // 2. Aggregate Overall Stats (Impressions, Clicks, Conversions)
+            const stats = await EventLog.aggregate([
+                {
+                    $match: {
+                        nudge_id: campaignId,
+                        organization_id: orgId // Security check
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        impressions: { $sum: { $cond: [{ $eq: ["$event_type", "impression"] }, 1, 0] } },
+                        clicks: { $sum: { $cond: [{ $eq: ["$event_type", "click"] }, 1, 0] } },
+                        conversions: { $sum: { $cond: [{ $eq: ["$event_type", "conversion"] }, 1, 0] } },
+                        uniqueUsers: { $addToSet: "$user_id" }
+                    }
+                }
+            ]);
+
+            const overallStats = stats[0] || { impressions: 0, clicks: 0, conversions: 0, uniqueUsers: [] };
+            const uniqueUserCount = overallStats.uniqueUsers ? overallStats.uniqueUsers.length : 0;
+
+
+            // 3. User List (Who interacted)
+            // Ideally we paginate this, but for a report we might want top 100 or all.
+            // Let's get top 100 users sorted by activity count
+            const topUsers = await EventLog.aggregate([
+                { $match: { nudge_id: campaignId, organization_id: orgId } },
+                { $group: { _id: "$user_id", eventCount: { $sum: 1 }, lastSeen: { $max: "$timestamp" } } },
+                { $sort: { eventCount: -1 } },
+                { $limit: 100 }
+            ]);
+
+            // 4. Event Metadata Breakdown (Top properties)
+            // unwinding metadata is expensive, so we'll do a simplified grouping by event type
+            const eventBreakdown = await EventLog.aggregate([
+                { $match: { nudge_id: campaignId, organization_id: orgId } },
+                { $group: { _id: "$event_type", count: { $sum: 1 } } }
+            ]);
+
+            res.json({
+                campaign: {
+                    id: campaign._id,
+                    name: campaign.name,
+                    status: campaign.status,
+                    createdAt: campaign.createdAt
+                },
+                stats: {
+                    impressions: overallStats.impressions,
+                    clicks: overallStats.clicks,
+                    conversions: overallStats.conversions,
+                    uniqueUserCount: uniqueUserCount,
+                    ctr: overallStats.impressions > 0 ? ((overallStats.clicks / overallStats.impressions) * 100).toFixed(2) : 0
+                },
+                users: topUsers.map(u => ({ userId: u._id, eventCount: u.eventCount, lastSeen: u.lastSeen })),
+                events: eventBreakdown.map(e => ({ type: e._id, count: e.count }))
+            });
+
+        } catch (error) {
+            console.error('Get Campaign Stats Error:', error);
+            res.status(500).json({ error: 'Failed to fetch campaign stats' });
+        }
+    }
 }
 
 module.exports = new AnalyticsController();
