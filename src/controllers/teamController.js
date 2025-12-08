@@ -36,7 +36,7 @@ exports.inviteMember = async (req, res) => {
         }
 
         // Generate random temp password
-        const tempPassword = '1234'; // Default password as requested
+        const tempPassword = '123456'; // Default password meeting minlength requirement
 
         try {
             user = await User.create({
