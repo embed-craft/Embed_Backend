@@ -19,7 +19,11 @@ exports.getMembers = async (req, res) => {
  */
 exports.inviteMember = async (req, res) => {
     try {
-        const { email, role } = req.body; // Name is not in User schema yet
+        const { email, role, name } = req.body;
+
+        if (!req.orgId) {
+            return res.status(403).json({ error: 'Organization ID missing from request' });
+        }
 
         if (!email) {
             return res.status(400).json({ error: 'Email is required' });
@@ -32,26 +36,29 @@ exports.inviteMember = async (req, res) => {
         }
 
         // Generate random temp password
-        // Generate random temp password
         const tempPassword = '1234'; // Default password as requested
 
-        user = await User.create({
-            name: req.body.name, // Save the name provided in invitation
-            email,
-            password: tempPassword, // Will be hashed by pre-save hook
-            role: role || 'editor',
-            organization_id: req.orgId
-        });
+        try {
+            user = await User.create({
+                name,
+                email,
+                password: tempPassword, // Will be hashed by pre-save hook
+                role: role || 'editor',
+                organization_id: req.orgId
+            });
+        } catch (validationError) {
+            if (validationError.name === 'ValidationError') {
+                const messages = Object.values(validationError.errors).map(val => val.message);
+                return res.status(400).json({ error: messages.join(', ') });
+            }
+            throw validationError;
+        }
 
-        // In a real app, send email with tempPassword here
         console.log(`Invited user ${email} with password: ${tempPassword}`);
 
         res.status(201).json({
             message: 'Invitation sent successfully',
             user: {
-                id: user._id,
-                email: user.email,
-                role: user.role,
                 id: user._id,
                 email: user.email,
                 role: user.role,
@@ -61,7 +68,7 @@ exports.inviteMember = async (req, res) => {
         });
     } catch (error) {
         console.error('Invite Member Error:', error);
-        res.status(500).json({ error: 'Failed to invite user' });
+        res.status(500).json({ error: error.message || 'Failed to invite user' });
     }
 };
 
