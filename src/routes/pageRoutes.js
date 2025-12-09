@@ -14,6 +14,7 @@ const upload = multer({
 router.post('/session', authMiddleware, pageController.createSession);
 router.get('/', authMiddleware, pageController.getPages);
 router.get('/:id', authMiddleware, pageController.getPage);
+router.delete('/:id', authMiddleware, pageController.deletePage); // Add delete support
 router.get('/poll/:token', authMiddleware, pageController.pollSession);
 
 // SDK Routes (Public/Token Protected inside controller)

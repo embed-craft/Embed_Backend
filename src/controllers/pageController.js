@@ -150,6 +150,27 @@ exports.getPage = async (req, res) => {
     }
 };
 
+exports.deletePage = async (req, res) => {
+    try {
+        const page = await Page.findById(req.params.id);
+        if (!page) return res.status(404).json({ message: 'Page not found' });
+
+        // Optional: Delete the image file from disk to save space
+        if (page.imageUrl) {
+            const filePath = path.join(__dirname, '../../', page.imageUrl);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+
+        await Page.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Page deleted successfully' });
+    } catch (error) {
+        console.error('Delete Page Error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // Polling Endpoint for Dashboard
 exports.pollSession = async (req, res) => {
     try {
