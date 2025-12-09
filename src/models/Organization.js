@@ -5,6 +5,14 @@ const OrganizationSchema = new mongoose.Schema({
     name: { type: String, required: true },
     api_key: { type: String, unique: true, index: true },
 
+    // Deep Linking & App Config
+    // CONSTRAINT: app_scheme must be unique across the system to prevent deep link hijacking
+    app_scheme: { type: String, default: null, unique: true, sparse: true },
+    bundle_id: {
+        android: { type: String, default: null }, // e.g., 'com.bigbasket.android'
+        ios: { type: String, default: null }      // e.g., 'id123456789'
+    },
+
     // Contract & Billing
     contract_start_date: { type: Date },
     contract_end_date: { type: Date },

@@ -37,6 +37,7 @@ app.use('/', require('./src/routes/segmentRoutes')); // Segments API
 app.use('/', require('./src/routes/flowRoutes')); // Flows API
 app.use('/', require('./src/routes/templateRoutes')); // Templates API
 app.use('/', nudgeRoutes);
+app.use('/api/pages', require('./src/routes/pageRoutes')); // Page Feature API
 
 // Database Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/nudge_db';

@@ -13,6 +13,7 @@
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.0.0",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "sharp": "^0.34.5"
   }
 }

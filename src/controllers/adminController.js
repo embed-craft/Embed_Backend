@@ -11,17 +11,30 @@ class AdminController {
      */
     async createClient(req, res) {
         try {
-            const { name, adminEmail, password, planLimit, contractEndDate } = req.body;
+            const { name, adminEmail, password, planLimit, contractEndDate, app_scheme, bundle_id } = req.body;
 
-            // 1. Create Organization
+            // 1. Validation for App Identity
+            if (!app_scheme) {
+                return res.status(400).json({ error: 'App Scheme is required for Deep Linking (e.g., "myapp://")' });
+            }
+
+            // 2. Check Uniqueness (Manual check for clear error message)
+            const existingOrg = await Organization.findOne({ app_scheme });
+            if (existingOrg) {
+                return res.status(409).json({ error: `App Scheme '${app_scheme}' is already in use by another client.` });
+            }
+
+            // 3. Create Organization
             const org = await Organization.create({
                 name,
                 admin_email: adminEmail,
+                app_scheme,
+                bundle_id: bundle_id || {}, // Default to empty object if not provided
                 plan_limit: planLimit || 100000,
                 contract_end_date: contractEndDate ? new Date(contractEndDate) : undefined
             });
 
-            // 2. Create Admin User for this Org
+            // 4. Create Admin User for this Org
             const user = await User.create({
                 email: adminEmail,
                 password, // Will be hashed by model
@@ -36,6 +49,10 @@ class AdminController {
             });
 
         } catch (error) {
+            // Handle unique index error from MongoDB if race condition occurs
+            if (error.code === 11000 && error.keyPattern && error.keyPattern.app_scheme) {
+                return res.status(409).json({ error: `App Scheme is already in use.` });
+            }
             res.status(500).json({ error: error.message });
         }
     }
