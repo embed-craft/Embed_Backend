@@ -46,9 +46,19 @@ exports.createSession = async (req, res) => {
     }
 };
 
+const cloudinary = require('cloudinary').v2;
+const streamifier = require('streamifier');
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
 exports.uploadPage = async (req, res) => {
     try {
-        // 1. Validate Token (Header: Authorization: Bearer <token>)
+        // 1. Validate Token
         const authHeader = req.headers.authorization;
         if (!authHeader) return res.status(401).json({ message: 'Missing token' });
 
@@ -64,28 +74,44 @@ exports.uploadPage = async (req, res) => {
             return res.status(403).json({ message: 'Invalid token type' });
         }
 
-        // 2. Validate API Key Org vs Token Org (Security Gap Fix)
-        // In a real SDK flow, the API Key validation middleware runs first and attaches req.user/req.org
-        // Here we assume req.sdk_client_org_id is set by authMiddleware (if using SDK endpoint logic)
-        // For now, we trust the Signed Token as the primary source of truth for target Org.
-
         const organization_id = decoded.organization_id;
 
-        // 3. Handle File Upload
+        // 2. Validate File
         if (!req.file) {
             return res.status(400).json({ message: 'Screenshot image required' });
         }
 
-        // 4. Image Compression (Performance Gap Fix)
-        const filename = `page_${Date.now()}_${Math.round(Math.random() * 1000)}.jpg`;
-        const filepath = path.join(uploadDir, filename);
-
-        await sharp(req.file.buffer)
-            .resize(1080, null, { withoutEnlargement: true }) // Limit width to 1080px
+        // 3. Optimize & Upload to Cloudinary
+        // Use Sharp to resize/compress first, then proper stream upload
+        const optimizedBuffer = await sharp(req.file.buffer)
+            .resize(1080, null, { withoutEnlargement: true })
             .jpeg({ quality: 80 })
-            .toFile(filepath);
+            .toBuffer();
 
-        // 5. Parse Metadata
+        // Helper to upload stream to Cloudinary
+        const uploadFromBuffer = (buffer) => {
+            return new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: 'embeddedcraft/pages', // Organized folder
+                        resource_type: 'image'
+                    },
+                    (error, result) => {
+                        if (result) {
+                            resolve(result);
+                        } else {
+                            reject(error);
+                        }
+                    }
+                );
+                streamifier.createReadStream(buffer).pipe(stream);
+            });
+        };
+
+        const result = await uploadFromBuffer(optimizedBuffer);
+        const imageUrl = result.secure_url; // Verified Public URL
+
+        // 4. Parse Metadata
         const {
             name,
             pageTag,
@@ -103,15 +129,15 @@ exports.uploadPage = async (req, res) => {
             return res.status(400).json({ message: 'Invalid JSON metadata' });
         }
 
-        // 6. Save Page (Atomic Write)
+        // 5. Save Page
         const newPage = new Page({
             organization_id,
             name: name || pageTag,
             pageTag,
-            imageUrl: `/uploads/pages/${filename}`,
+            imageUrl: imageUrl, // Save full Cloudinary URL
             elements: parsedElements,
             deviceMetadata: parsedMetadata,
-            sessionToken: token // To link back to dashboard polling
+            sessionToken: token
         });
 
         await newPage.save();
@@ -120,7 +146,7 @@ exports.uploadPage = async (req, res) => {
 
     } catch (error) {
         console.error('Upload Error:', error);
-        res.status(500).json({ message: 'Upload failed' });
+        res.status(500).json({ message: 'Upload failed: ' + error.message });
     }
 };
 
