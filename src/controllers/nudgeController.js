@@ -233,7 +233,12 @@ class NudgeController {
             const Property = require('../models/Property');
 
             // B1. Find or Create Event
-            let eventDoc = await Event.findOne({ name: action, organization_id: orgId });
+            // FUZZY MATCHING: Check if event exists (case-insensitive) to prevent duplicates
+            let eventDoc = await Event.findOne({
+                name: { $regex: new RegExp(`^${action}$`, 'i') },
+                organization_id: orgId
+            });
+
             if (!eventDoc) {
                 eventDoc = await Event.create({
                     name: action,
@@ -334,6 +339,8 @@ class NudgeController {
                 const userProperties = userProfile ? { ...userProfile.properties, ...userProfile } : {};
 
                 for (const nudge of potentialNudges) {
+                    // DEBUG LOG
+                    console.log(`[Matching] Checking Nudge ${nudge.name} (${nudge._id}) for user ${userId}`);
 
                     // A.5 Check Minimum Event Occurrences (Trigger Rule)
                     // If nudge has a rule like "Profile Viewed at least 2 times", check historical count
@@ -345,22 +352,24 @@ class NudgeController {
                             event_type: { $regex: new RegExp(`^${action.replace(/_/g, '[\\s_]')}$`, 'i') }
                         });
 
+                        console.log(`[Matching] Event Count for ${action}: ${count}. Rule: ${nudge.trigger_rules.operator} ${nudge.trigger_rules.value}`);
+
                         // Note: 'count' includes the current event because we logged it in Step A above.
                         const targetVal = Number(nudge.trigger_rules.value || nudge.trigger_rules.event_count); // Handle both formats
 
-                        if (nudge.trigger_rules.operator === 'greater_than' && count <= targetVal) continue;
-                        if (nudge.trigger_rules.operator === 'less_than' && count >= targetVal) continue;
-                        if (nudge.trigger_rules.operator === 'equals' && count !== targetVal) continue;
+                        if (nudge.trigger_rules.operator === 'greater_than' && count <= targetVal) { console.log('FAIL: Count too low'); continue; }
+                        if (nudge.trigger_rules.operator === 'less_than' && count >= targetVal) { console.log('FAIL: Count too high'); continue; }
+                        if (nudge.trigger_rules.operator === 'equals' && count !== targetVal) { console.log('FAIL: Count not equal'); continue; }
 
                         // Default "at least" behavior
-                        if (!nudge.trigger_rules.operator && count < targetVal) continue;
+                        if (!nudge.trigger_rules.operator && count < targetVal) { console.log(`FAIL: Count ${count} < ${targetVal}`); continue; }
                     }
 
                     // Check Segments
                     if (nudge.segments && nudge.segments.length > 0) {
                         const userSegments = userProfile?.segments || [];
                         const hasMatch = nudge.segments.some(seg => userSegments.includes(seg));
-                        if (!hasMatch) continue;
+                        if (!hasMatch) { console.log('FAIL: Segment mismatch', userSegments); continue; }
                     }
 
                     // Check Frequency Capping
@@ -371,7 +380,7 @@ class NudgeController {
                             nudge_id: nudge.nudge_id,
                             event_type: 'impression'
                         });
-                        if (impressions >= nudge.display_rules.frequency_cap) continue;
+                        if (impressions >= nudge.display_rules.frequency_cap) { console.log(`FAIL: Frequency cap hit (${impressions})`); continue; }
                     }
 
                     // Check Targeting Rules
@@ -399,9 +408,12 @@ class NudgeController {
                         if (!allRulesPassed) continue;
                     }
 
+                    console.log('SUCCESS: Nudge Matched!');
                     matchedNudges.push(nudge);
                 }
             }
+
+            console.log(`[Matching] Total Matched: ${matchedNudges.length}`);
 
             res.json({
                 success: true,
