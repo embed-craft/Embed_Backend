@@ -337,6 +337,15 @@ class NudgeController {
 
             console.log(`[Query] Found ${potentialNudges.length} potential nudges in DB.`);
 
+            // DEBUG: If no nudges found, dump EVERYTHING for this Org to see what's wrong
+            if (potentialNudges.length === 0) {
+                const allNudges = await Nudge.find({ organization_id: orgId }).select('name status trigger_type trigger_event').lean();
+                console.log(`[Debug] TOTAL Nudges in Org ${orgId}: ${allNudges.length}`);
+                allNudges.forEach(n => {
+                    console.log(` - Nudge: "${n.name}" | Status: ${n.status} | Trigger: ${n.trigger_type} -> "${n.trigger_event}"`);
+                });
+            }
+
             const matchedNudges = [];
 
             if (potentialNudges.length > 0) {
