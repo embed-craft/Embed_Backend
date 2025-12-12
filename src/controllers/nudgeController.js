@@ -323,6 +323,10 @@ class NudgeController {
             // D. Check for Triggered Nudges (Real-time Campaign Matching)
             // We search for nudges where trigger_type is 'event' and trigger_event matches 'action'
             const Nudge = require('../models/Nudge');
+
+            // LOG QUERY PARAMS
+            console.log(`[Query] Searching Nudges for Org: ${orgId}, Action: ${action} (Regex: ^${action.replace(/_/g, '[\\s_]')}$)`);
+
             const potentialNudges = await Nudge.find({
                 organization_id: orgId,
                 status: 'active',
@@ -330,6 +334,8 @@ class NudgeController {
                 // FUZZY MATCHING: Use regex to match "Profile Viewed" with "profile_viewed"
                 trigger_event: { $regex: new RegExp(`^${action.replace(/_/g, '[\\s_]')}$`, 'i') }
             }).lean();
+
+            console.log(`[Query] Found ${potentialNudges.length} potential nudges in DB.`);
 
             const matchedNudges = [];
 
