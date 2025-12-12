@@ -322,7 +322,8 @@ class NudgeController {
                 organization_id: orgId,
                 status: 'active',
                 trigger_type: 'event',
-                trigger_event: action
+                // FUZZY MATCHING: Use regex to match "Profile Viewed" with "profile_viewed"
+                trigger_event: { $regex: new RegExp(`^${action.replace(/_/g, '[\\s_]')}$`, 'i') }
             }).lean();
 
             const matchedNudges = [];
@@ -333,6 +334,28 @@ class NudgeController {
                 const userProperties = userProfile ? { ...userProfile.properties, ...userProfile } : {};
 
                 for (const nudge of potentialNudges) {
+
+                    // A.5 Check Minimum Event Occurrences (Trigger Rule)
+                    // If nudge has a rule like "Profile Viewed at least 2 times", check historical count
+                    if (nudge.trigger_rules && nudge.trigger_rules.event_count) {
+                        const count = await EventLog.countDocuments({
+                            organization_id: orgId,
+                            user_id: userId,
+                            // Use regex again to match variations in logs: profile_viewed vs Profile Viewed
+                            event_type: { $regex: new RegExp(`^${action.replace(/_/g, '[\\s_]')}$`, 'i') }
+                        });
+
+                        // Note: 'count' includes the current event because we logged it in Step A above.
+                        const targetVal = Number(nudge.trigger_rules.value || nudge.trigger_rules.event_count); // Handle both formats
+
+                        if (nudge.trigger_rules.operator === 'greater_than' && count <= targetVal) continue;
+                        if (nudge.trigger_rules.operator === 'less_than' && count >= targetVal) continue;
+                        if (nudge.trigger_rules.operator === 'equals' && count !== targetVal) continue;
+
+                        // Default "at least" behavior
+                        if (!nudge.trigger_rules.operator && count < targetVal) continue;
+                    }
+
                     // Check Segments
                     if (nudge.segments && nudge.segments.length > 0) {
                         const userSegments = userProfile?.segments || [];
