@@ -315,7 +315,76 @@ class NudgeController {
                 }
             }
 
-            res.json({ success: true, message: 'Event tracked and processed' });
+            // D. Check for Triggered Nudges (Real-time Campaign Matching)
+            // We search for nudges where trigger_type is 'event' and trigger_event matches 'action'
+            const Nudge = require('../models/Nudge');
+            const potentialNudges = await Nudge.find({
+                organization_id: orgId,
+                status: 'active',
+                trigger_type: 'event',
+                trigger_event: action
+            }).lean();
+
+            const matchedNudges = [];
+
+            if (potentialNudges.length > 0) {
+                const EndUser = require('../models/EndUser');
+                const userProfile = await EndUser.findOne({ organization_id: orgId, user_id: userId }).lean();
+                const userProperties = userProfile ? { ...userProfile.properties, ...userProfile } : {};
+
+                for (const nudge of potentialNudges) {
+                    // Check Segments
+                    if (nudge.segments && nudge.segments.length > 0) {
+                        const userSegments = userProfile?.segments || [];
+                        const hasMatch = nudge.segments.some(seg => userSegments.includes(seg));
+                        if (!hasMatch) continue;
+                    }
+
+                    // Check Frequency Capping
+                    if (nudge.display_rules && nudge.display_rules.frequency_cap) {
+                        const impressions = await EventLog.countDocuments({
+                            organization_id: orgId,
+                            user_id: userId,
+                            nudge_id: nudge.nudge_id,
+                            event_type: 'impression'
+                        });
+                        if (impressions >= nudge.display_rules.frequency_cap) continue;
+                    }
+
+                    // Check Targeting Rules
+                    if (nudge.targeting && nudge.targeting.length > 0) {
+                        let allRulesPassed = true;
+                        for (const rule of nudge.targeting) {
+                            if (rule.type === 'group') continue;
+
+                            if (rule.type === 'user_property') {
+                                const userValue = userProperties[rule.property || rule.field];
+                                const targetValue = rule.value;
+                                let rulePassed = false;
+                                switch (rule.operator) {
+                                    case 'equals': rulePassed = userValue == targetValue; break;
+                                    case 'not_equals': rulePassed = userValue != targetValue; break;
+                                    case 'greater_than': rulePassed = Number(userValue) > Number(targetValue); break;
+                                    case 'less_than': rulePassed = Number(userValue) < Number(targetValue); break;
+                                    case 'contains': rulePassed = userValue != null && String(userValue).includes(String(targetValue)); break;
+                                    case 'not_contains': rulePassed = userValue == null || !String(userValue).includes(String(targetValue)); break;
+                                    default: rulePassed = true;
+                                }
+                                if (!rulePassed) { allRulesPassed = false; break; }
+                            }
+                        }
+                        if (!allRulesPassed) continue;
+                    }
+
+                    matchedNudges.push(nudge);
+                }
+            }
+
+            res.json({
+                success: true,
+                message: 'Event tracked and processed',
+                matched: matchedNudges // SDK will auto-render these
+            });
 
         } catch (error) {
             console.error('Track Event Error:', error);
