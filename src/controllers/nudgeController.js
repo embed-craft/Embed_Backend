@@ -208,13 +208,14 @@ class NudgeController {
 
     async trackEvent(req, res) {
         try {
-            // Support SDK aliases: event -> action, properties -> metadata
-            let { action, metadata, userId, event, properties } = req.body;
+            // Support SDK aliases: event -> action, properties -> metadata, user_id -> userId
+            let { action, metadata, userId, user_id, event, properties } = req.body;
             const orgId = req.orgId;
 
             // Normalize inputs
             action = action || event;
             metadata = metadata || properties || {};
+            userId = userId || user_id; // Robustly handle snake_case input
 
             if (!action) {
                 return res.status(400).json({ error: 'Action/Event is required' });
