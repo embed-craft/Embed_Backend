@@ -321,7 +321,8 @@ class NudgeController {
             }
 
             // D. Check for Triggered Nudges (Real-time Campaign Matching)
-            // We search for nudges where trigger_type is 'event' and trigger_event matches 'action'
+            // We search for nudges where trigger_event matches 'action'. 
+            // NOTE: 'trigger_type' does not exist in Schema, so we rely solely on trigger_event.
             const Nudge = require('../models/Nudge');
 
             // LOG QUERY PARAMS
@@ -330,7 +331,7 @@ class NudgeController {
             const potentialNudges = await Nudge.find({
                 organization_id: orgId,
                 status: 'active',
-                trigger_type: 'event',
+                // Removed 'trigger_type' as it is not in the Schema
                 // FUZZY MATCHING: Use regex to match "Profile Viewed" with "profile_viewed"
                 trigger_event: { $regex: new RegExp(`^${action.replace(/_/g, '[\\s_]')}$`, 'i') }
             }).lean();
@@ -339,10 +340,10 @@ class NudgeController {
 
             // DEBUG: If no nudges found, dump EVERYTHING for this Org to see what's wrong
             if (potentialNudges.length === 0) {
-                const allNudges = await Nudge.find({ organization_id: orgId }).select('name status trigger_type trigger_event').lean();
+                const allNudges = await Nudge.find({ organization_id: orgId }).select('campaign_name status trigger_event').lean();
                 console.log(`[Debug] TOTAL Nudges in Org ${orgId}: ${allNudges.length}`);
                 allNudges.forEach(n => {
-                    console.log(` - Nudge: "${n.name}" | Status: ${n.status} | Trigger: ${n.trigger_type} -> "${n.trigger_event}"`);
+                    console.log(` - Nudge: "${n.campaign_name}" | Status: ${n.status} | Trigger Event: "${n.trigger_event}"`);
                 });
             }
 
@@ -355,7 +356,7 @@ class NudgeController {
 
                 for (const nudge of potentialNudges) {
                     // DEBUG LOG
-                    console.log(`[Matching] Checking Nudge ${nudge.name} (${nudge._id}) for user ${userId}`);
+                    console.log(`[Matching] Checking Nudge ${nudge.campaign_name} (${nudge._id}) for user ${userId}`);
 
                     // A.5 Check Minimum Event Occurrences (Trigger Rule)
                     // If nudge has a rule like "Profile Viewed at least 2 times", check historical count
