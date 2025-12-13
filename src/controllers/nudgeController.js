@@ -27,7 +27,13 @@ class NudgeController {
                     nudges = await Nudge.find({
                         organization_id: orgId,
                         status: 'active',
-                        trigger_screen: { $in: [screenName, 'all'] }
+                        $or: [
+                            { 'display_rules.pages': { $in: [screenName] } }, // Explicit match in array
+                            { 'display_rules.pages': { $size: 0 } },          // Empty array = All pages
+                            { 'display_rules.pages': { $exists: false } },    // Field missing = All pages (legacy)
+                            { trigger_screen: 'all' },                        // Legacy "all"
+                            { trigger_screen: screenName }                    // Legacy exact match
+                        ]
                     }).sort({ priority: -1 }).lean();
 
                     // 3. Update Cache (Async)
@@ -52,8 +58,10 @@ class NudgeController {
             let matchedNudge = null;
             for (const nudge of (nudges || [])) {
                 // A. Platform Check
-                if (nudge.target_audience && nudge.target_audience.length > 0) {
-                    if (platform && !nudge.target_audience.includes(platform.toLowerCase())) continue;
+                // Priority: display_rules.platforms (New) > target_audience (Legacy)
+                const targetPlatforms = (nudge.display_rules && nudge.display_rules.platforms) || nudge.target_audience;
+                if (targetPlatforms && targetPlatforms.length > 0) {
+                    if (platform && !targetPlatforms.map(p => p.toLowerCase()).includes(platform.toLowerCase())) continue;
                 }
 
                 // A.1 SDK Version Check

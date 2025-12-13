@@ -16,6 +16,10 @@ router.delete('/events/:id', metadataController.deleteEvent);
 router.get('/properties', metadataController.getProperties);
 router.post('/properties', metadataController.createProperty);
 router.put('/properties/:id', metadataController.updateProperty);
+router.put('/properties/:id', metadataController.updateProperty);
 router.delete('/properties/:id', metadataController.deleteProperty);
+
+// Pages
+router.get('/pages', metadataController.getPages);
 
 module.exports = router;

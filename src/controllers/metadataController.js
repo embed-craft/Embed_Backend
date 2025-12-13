@@ -1,5 +1,7 @@
 const Event = require('../models/Event');
 const Property = require('../models/Property');
+const Page = require('../models/Page'); // Import Page model
+
 
 // --- Events ---
 
@@ -189,3 +191,20 @@ exports.deleteProperty = async (req, res) => {
         res.status(500).json({ error: 'Failed to delete property' });
     }
 };
+
+// --- Pages ---
+
+exports.getPages = async (req, res) => {
+    try {
+        const orgId = req.orgId;
+        // Fetch pages, focusing on name and pageTag for the dropdown
+        const pages = await Page.find({ organization_id: orgId })
+            .select('name pageTag imageUrl')
+            .sort({ createdAt: -1 });
+        res.json(pages);
+    } catch (error) {
+        console.error('Get Pages Error:', error);
+        res.status(500).json({ error: 'Failed to fetch pages' });
+    }
+};
+
